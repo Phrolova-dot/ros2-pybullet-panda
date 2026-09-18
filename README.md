@@ -1,5 +1,7 @@
 # ROS 2 + PyBullet 机械臂实验平台
 
+[中文](README.md) | [English](README_EN.md)
+
 这是一个用于项目式学习的 ROS 2 Jazzy 中型项目：同一份 Xacro 模型同时交给 RViz2 与 PyBullet，ROS 2 负责通信、控制和可视化，PyBullet 负责物理仿真。
 
 当前版本包含：
