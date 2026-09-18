@@ -1,0 +1,7 @@
+geometry_msgs/Pose target
+string end_effector_link
+float64[] seed_positions
+---
+bool success
+float64[] joint_positions
+string message

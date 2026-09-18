@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="panda">
+  <xacro:arg name="use_root_inertia" default="true"/>
+  <xacro:include filename="../vendor/franka_panda/panda.urdf"/>
+  <link name="base_link">
+    <xacro:if value="$(arg use_root_inertia)">
+      <inertial><mass value="0"/><inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/></inertial>
+    </xacro:if>
+  </link>
+  <joint name="base_to_panda" type="fixed">
+    <parent link="base_link"/><child link="panda_link0"/>
+  </joint>
+  <link name="tool0">
+    <inertial><mass value="0"/><inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/></inertial>
+  </link>
+  <joint name="tool0_alias" type="fixed">
+    <parent link="panda_hand"/><child link="tool0"/>
+  </joint>
+  <link name="tool_tip">
+    <inertial><mass value="0"/><inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/></inertial>
+  </link>
+  <joint name="tool_tip_alias" type="fixed">
+    <parent link="panda_grasptarget"/><child link="tool_tip"/>
+  </joint>
+</robot>
