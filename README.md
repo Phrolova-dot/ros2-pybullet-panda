@@ -1,20 +1,23 @@
-# ROS 2 + PyBullet 机械臂实验平台
+# ROS 2 + PyBullet Robotic Arm Lab
 
-[中文](README.md) | [English](README_EN.md)
+[中文](README_ZH.md) | [English](README.md)
 
-这是一个用于项目式学习的 ROS 2 Jazzy 中型项目：同一份 Xacro 模型同时交给 RViz2 与 PyBullet，ROS 2 负责通信、控制和可视化，PyBullet 负责物理仿真。
+This is a medium-sized ROS 2 Jazzy project for project-based learning. RViz2
+and PyBullet use the same Xacro model: ROS 2 handles communication, control,
+and visualization, while PyBullet performs the physics simulation.
 
-当前版本包含：
+The current version includes:
 
-- Franka Panda 七轴机械臂与双指夹爪模型；
-- PyBullet 240 Hz 确定步长仿真；
-- 关节状态、仿真时钟、末端位姿、轨迹、接触与物体 Marker；
-- 标准 `FollowJointTrajectory` Action；
-- 世界重置、暂停、逆运动学和生成方块服务；
-- RViz2、预设轨迹、IK 演示及自动化测试；
-- 无界面运行模式，适合 WSL2 和持续集成。
+- A seven-axis Franka Panda arm with a two-finger gripper
+- Deterministic PyBullet simulation at 240 Hz
+- Joint states, simulation clock, end-effector pose and path, contacts, and
+  object markers
+- A standard `FollowJointTrajectory` action
+- Services for world reset, pause, inverse kinematics, and box spawning
+- RViz2 integration, predefined trajectories, an IK demo, and automated tests
+- A headless mode suitable for WSL2 and continuous integration
 
-## 系统结构
+## Architecture
 
 ```text
 demo / IK client
@@ -37,21 +40,22 @@ trajectory_controller ----> /arm_controller/joint_trajectory
                              TF + RViz2
 ```
 
-五个 ROS 2 包各自承担单一职责：
+The workspace contains five ROS 2 packages:
 
-| 包 | 作用 |
+| Package | Responsibility |
 | --- | --- |
-| `pybullet_arm_description` | Xacro/URDF 与 RViz2 配置 |
-| `pybullet_arm_interfaces` | 自定义消息与服务 |
-| `pybullet_arm_sim` | PyBullet 世界及 ROS 2 适配层 |
-| `pybullet_arm_control` | 轨迹 Action 服务器与示例客户端 |
-| `pybullet_arm_bringup` | 参数和 Launch 编排 |
+| `pybullet_arm_description` | Xacro/URDF model and RViz2 configuration |
+| `pybullet_arm_interfaces` | Custom messages and services |
+| `pybullet_arm_sim` | PyBullet world and ROS 2 adapter |
+| `pybullet_arm_control` | Trajectory action server and demo clients |
+| `pybullet_arm_bringup` | Parameters and launch orchestration |
 
-详细说明见 [架构文档](docs/architecture.md) 和 [接口清单](docs/interfaces.md)。
+See the [architecture notes](docs/architecture.md) and
+[interface reference](docs/interfaces.md) for details.
 
-## 快速启动
+## Quick Start
 
-每个新终端先执行：
+Initialize every new terminal:
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -59,72 +63,81 @@ source ~/venvs/ros2_pybullet/bin/activate
 source ~/ros2_ws/install/setup.bash
 ```
 
-启动完整仿真与 RViz2：
+Start the complete simulation with RViz2:
 
 ```bash
 ros2 launch pybullet_arm_bringup simulation.launch.py
 ```
 
-启动后，在另一个已完成环境初始化的终端运行预设轨迹：
+In another initialized terminal, run the predefined trajectory:
 
 ```bash
 ros2 run pybullet_arm_control demo_sequence
 ```
 
-运行 IK 目标点演示：
+Run the IK target demo:
 
 ```bash
 ros2 run pybullet_arm_control ik_demo --ros-args \
   -p target_x:=0.42 -p target_y:=0.12 -p target_z:=0.24
 ```
 
-## 夹取搬运
+## Pick and Place
 
-更新后先关闭旧仿真，再启动 PyBullet 窗口（也可同时启用 RViz）：
+Stop any old simulation process, then start the native PyBullet window. RViz2
+can also be enabled if desired.
 
 ```bash
 ros2 launch pybullet_arm_bringup simulation.launch.py rviz:=false pybullet_gui:=true
 ```
 
-在另一个完成环境初始化的终端运行：
+Run the task in another initialized terminal:
 
 ```bash
 ros2 run pybullet_arm_control pick_place
 ```
 
-程序读取 training_cube 的仿真位姿，依次执行张开、靠近、下探、夹持、
-抬升、搬运、下降、松开和退回。默认放置中心为 (0.43, 0.25, 0.035) m。
-使用接触和摩擦进行物理夹持；检查两指接触、离地高度和最终物体位置，
-失败返回非零退出码。验收容差为 2.5 cm，不是实机精度声明。
+The program reads the simulated pose of `training_cube`, then opens the
+gripper, approaches, descends, grasps, lifts, transfers, lowers, releases, and
+retreats. The default placement center is `(0.43, 0.25, 0.035) m`.
 
-搬回初始位置：
+The cube is held through physical contact and friction. The program verifies
+two-finger contact, lift height, and final object position, and returns a
+non-zero exit code on failure. The 2.5 cm acceptance tolerance is a simulation
+test criterion, not a claim about real-hardware accuracy.
+
+Move the cube back to its initial position:
 
 ```bash
 ros2 run pybullet_arm_control pick_place --ros-args -p place_y:=0.0
 ```
 
-此演示针对地面上的标准 6×6×7 cm 训练方块和无障碍场景，使用仿真真值，
-尚未接入相机识别或避障规划。不要同时运行其他轨迹客户端。
-重置仿真可重新开始；重置会移除另外生成的物体：
+This demo is designed for the standard 6 × 6 × 7 cm training cube on an
+obstacle-free ground plane. It uses simulation ground truth and does not yet
+include camera-based perception or obstacle-aware planning. Do not run another
+trajectory client at the same time.
+
+Reset the simulation to start over. Resetting also removes other spawned
+objects.
 
 ```bash
 ros2 service call /simulation/reset std_srvs/srv/Trigger '{}'
 ```
 
-只看模型并手动拖动关节滑块：
+Display only the robot model with interactive joint sliders:
 
 ```bash
 ros2 launch pybullet_arm_bringup display.launch.py
 ```
 
-无图形界面运行：
+Run without graphical windows:
 
 ```bash
 ros2 launch pybullet_arm_bringup simulation.launch.py \
   rviz:=false pybullet_gui:=false
 ```
 
-## 构建
+## Build
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -135,7 +148,9 @@ python -m colcon build --symlink-install --packages-up-to pybullet_arm_bringup
 source install/setup.bash
 ```
 
-Python 额外依赖固定在 `requirements.txt`。首次创建虚拟环境时建议继承 ROS 2 的系统包：
+Additional Python dependencies are pinned in `requirements.txt`. When
+creating the virtual environment for the first time, inherit the ROS 2 system
+packages:
 
 ```bash
 python3 -m venv --system-site-packages ~/venvs/ros2_pybullet
@@ -143,9 +158,9 @@ source ~/venvs/ros2_pybullet/bin/activate
 python -m pip install -r ~/ros2_ws/src/ros2_pybullet_arm/requirements.txt
 ```
 
-## 验收
+## Verification
 
-单元测试：
+Run the unit tests:
 
 ```bash
 cd ~/ros2_ws
@@ -154,15 +169,17 @@ python -m colcon test --packages-select \
 python -m colcon test-result --verbose
 ```
 
-启动无界面仿真后，在另一个终端执行端到端验收：
+After starting the headless simulation, run the end-to-end smoke test in
+another terminal:
 
 ```bash
 python ~/ros2_ws/src/ros2_pybullet_arm/tools/smoke_test.py
 ```
 
-脚本会验证 `/clock`、`/joint_states`、世界重置、生成物体、IK 和轨迹 Action。
+The script verifies `/clock`, `/joint_states`, world reset, object spawning,
+IK, and the trajectory action.
 
-## 常用观察命令
+## Useful Inspection Commands
 
 ```bash
 ros2 node list
@@ -173,32 +190,44 @@ ros2 action info /arm_controller/follow_joint_trajectory
 ros2 service list
 ```
 
-暂停与继续：
+Pause and resume:
 
 ```bash
 ros2 service call /simulation/set_paused std_srvs/srv/SetBool "{data: true}"
 ros2 service call /simulation/set_paused std_srvs/srv/SetBool "{data: false}"
 ```
 
-夹爪开度使用总宽度，范围为 `0.0` 到 `0.08` 米：
+The gripper command uses the total opening width, from `0.0` to `0.08`
+meters:
 
 ```bash
 ros2 topic pub --once /gripper/command std_msgs/msg/Float64 "{data: 0.04}"
 ```
 
-## 学习方法
+## Learning Path
 
-不要先逐行读完整项目。按 [项目式学习路线](docs/learning_path.md) 的顺序，每次只改一个模块并用验收命令确认结果。推荐先从话题和 Launch 入手，再读轨迹控制器，最后进入 PyBullet 世界与逆运动学。
+Do not begin by reading the entire project line by line. Follow the
+[project-based learning path](docs/learning_path.md), change one module at a
+time, and use the acceptance commands after each change. A useful order is:
+topics and launch files, trajectory control, then the PyBullet world and IK.
 
-## 当前边界
+## Current Scope
 
-- 控制器是教学用 ROS 2 Action 服务器，不是 `ros2_control` 硬件接口；
-- IK 使用 PyBullet 数值解，目前不做碰撞约束和可达性残差判定；
-- 已实现标准训练方块的反馈检查搬运流程，尚未实现任意物体抓取和避障规划；
-- 仿真时钟由 PyBullet 节点发布，控制器故意使用墙上时间，避免暂停仿真时 Action 自锁。
+- The controller is an educational ROS 2 action server, not a
+  `ros2_control` hardware interface.
+- IK uses PyBullet's numerical solver and currently has no collision
+  constraints or reachability residual check.
+- Feedback-checked pick-and-place is implemented for the standard training
+  cube; arbitrary-object grasping and obstacle-aware planning are not.
+- The PyBullet node publishes simulation time, while the controller
+  intentionally uses monotonic wall time so pausing the simulation does not
+  deadlock an action.
 
-这些边界正好对应后续可独立实现的升级任务。
+These boundaries are natural extension points for future work.
 
-## 许可证
+## License
 
-项目代码采用 MIT；Panda 模型和网格采用 Apache-2.0，见描述包 vendor/NOTICE.md。模型惯性参数为教学简化值，不代表实机标定结果。
+Project code is licensed under MIT. The Panda model and meshes are licensed
+under Apache-2.0; see `pybullet_arm_description/vendor/NOTICE.md`. The model's
+inertial parameters are simplified for education and are not calibrated
+hardware values.
