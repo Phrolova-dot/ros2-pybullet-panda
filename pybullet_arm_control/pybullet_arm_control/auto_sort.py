@@ -128,7 +128,9 @@ class AutoSort(PickPlace):
 
     def scan(self):
         previous = self.observation[0] if self.observation else -1
-        self.wait(lambda: self.observation is not None and self.observation[0] > previous
+        # A delayed rendered frame must have been captured after the arm stopped.
+        minimum_stamp = max(previous, self.joint_stamp)
+        self.wait(lambda: self.observation is not None and self.observation[0] > minimum_stamp
                   and time.monotonic() - self.observation[1] < 1.0,
                   8.0, 'fresh synchronized RGB/CameraInfo/TF (enable cameras and resume simulation)')
         return self.observation[2]

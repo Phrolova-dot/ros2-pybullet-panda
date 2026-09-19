@@ -60,8 +60,11 @@ def parse_trajectory(joint_names: Sequence[str], points: Sequence) -> ParsedTraj
 
 
 def sample_trajectory(
-    start_positions: Sequence[float], trajectory: ParsedTrajectory, elapsed: float
+    start_positions: Sequence[float], trajectory: ParsedTrajectory, elapsed: float,
+    interpolation: str = 'linear',
 ) -> tuple[float, ...]:
+    if interpolation not in ('linear', 'quintic'):
+        raise ValueError('interpolation must be linear or quintic')
     if len(start_positions) != len(trajectory.joint_names):
         raise ValueError('start position length does not match trajectory')
     if elapsed <= 0.0:
@@ -78,6 +81,9 @@ def sample_trajectory(
             ratio = (elapsed - segment_start_time) / (
                 segment_end_time - segment_start_time
             )
+            if interpolation == 'quintic':
+                # Zero velocity and acceleration at each segment boundary.
+                ratio = ratio ** 3 * (10.0 - 15.0 * ratio + 6.0 * ratio ** 2)
             return tuple(
                 start + ratio * (end - start)
                 for start, end in zip(segment_start, segment_end, strict=True)

@@ -122,6 +122,13 @@ The smoke test independently checks the final physical object positions.
 `auto_sort` node supports `max_retries:=1`, `expected_parts:=4` and
 `keep_alive:=false` via ROS parameters; use it only with an existing sorting scene.
 
+Camera rendering runs in two bounded background processes, separate from physics.
+The default sorting view is 320×320 with a 15 Hz sampling target (actual FPS depends
+on CPU load). Built-in PyBullet image previews are disabled. Motion uses 120 Hz
+commands and smooth quintic ramps; grasp/verification pauses remain intentional.
+Override `camera_width`, `camera_height` and `camera_hz` in the sorting launch
+to trade image detail for frame rate. See [timing measurements](docs/rendering.md).
+
 ## Pick and Place
 
 Stop any old simulation process, then start the native PyBullet window. RViz2
@@ -212,7 +219,7 @@ ros2 launch pybullet_arm_bringup simulation.launch.py \
 
 Use `cameras:=false` to disable camera rendering, image/calibration topics,
 and camera TF. Increasing image size or frame rate adds CPU work and can
-slow the simulation. Cameras provide RGB observations; `auto_sort` performs
+reduce delivered camera FPS. Cameras provide RGB observations; `auto_sort` performs
 color-based detection, while `pick_place` continues to use simulated object
 poses. Depth and model inference are not implemented.
 

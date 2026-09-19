@@ -10,6 +10,7 @@ pybullet_sim:
 
 trajectory_controller:
   ros__parameters:
-    command_hz: 50.0
+    command_hz: 120.0
+    interpolation: quintic
     goal_tolerance: 0.05
     settle_timeout: 2.0

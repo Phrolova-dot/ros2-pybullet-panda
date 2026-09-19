@@ -33,6 +33,7 @@ class PickPlace(Node):
         self.contact_time = 0.0
         self.width = 0.0
         self.joint_time = 0.0
+        self.joint_stamp = -1
         self.active_goal = None
         qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         if use_object_feedback:
@@ -65,6 +66,7 @@ class PickPlace(Node):
         if all(n in positions for n in ('panda_finger_joint1', 'panda_finger_joint2')):
             self.width = positions['panda_finger_joint1'] + positions['panda_finger_joint2']
             self.joint_time = time.monotonic()
+            self.joint_stamp = message.header.stamp.sec * 1_000_000_000 + message.header.stamp.nanosec
 
     def wait(self, predicate, timeout, label):
         deadline = time.monotonic() + timeout
@@ -125,7 +127,7 @@ class PickPlace(Node):
             raise RuntimeError(result.error_string)
         self.wait(lambda: self.tip is not None and time.monotonic() - self.tip_time < 0.5
                   and math.dist(self.tip, target) < 0.015, 3.0, 'Cartesian target')
-        self.settle(0.3)
+        self.settle(0.08)
 
     def run(self):
         destination = (float(self.get_parameter('place_x').value),

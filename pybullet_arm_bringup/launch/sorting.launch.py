@@ -16,6 +16,9 @@ def generate_launch_description():
         DeclareLaunchArgument('pybullet_gui', default_value='true'),
         DeclareLaunchArgument('camera_viewer', default_value='true'),
         DeclareLaunchArgument('seed', default_value='42'),
+        DeclareLaunchArgument('camera_width', default_value='320'),
+        DeclareLaunchArgument('camera_height', default_value='320'),
+        DeclareLaunchArgument('camera_hz', default_value='15.0'),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(simulation),
             launch_arguments={
@@ -24,8 +27,11 @@ def generate_launch_description():
                 'camera_viewer': LaunchConfiguration('camera_viewer'),
                 'seed': LaunchConfiguration('seed'),
                 'sorting_scene': 'true', 'spawn_default_box': 'false',
-                'cameras': 'true', 'camera_width': '448', 'camera_height': '448',
-                'camera_hz': '5.0', 'external_topic': '/sorting/annotated_image',
+                'cameras': 'true',
+                'camera_width': LaunchConfiguration('camera_width'),
+                'camera_height': LaunchConfiguration('camera_height'),
+                'camera_hz': LaunchConfiguration('camera_hz'),
+                'external_topic': '/sorting/annotated_image',
             }.items()),
         Node(package='pybullet_arm_control', executable='auto_sort',
              name='auto_sort', output='screen'),

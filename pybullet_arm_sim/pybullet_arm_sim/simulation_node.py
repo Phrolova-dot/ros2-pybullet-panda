@@ -20,6 +20,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 
 from .bullet_world import ARM_JOINT_NAMES, BulletWorld
 from .cameras import CameraRig
+from .camera_worker import CameraWorker, snapshot
 from .sorting_scene import create_sorting_scene
 from .validation import validate_named_positions
 
@@ -56,6 +57,8 @@ class SimulationNode(Node):
             raise RuntimeError('camera size must be within 16x16 and 1920x1080')
         self.camera_period_ns = int(round(1_000_000_000 / camera_hz))
         self.next_camera_ns = 0
+        self.camera_generation = 0
+        self.camera_worker = None
 
         self.world = BulletWorld(
             xacro_path=xacro_path,
@@ -87,6 +90,7 @@ class SimulationNode(Node):
         self.path_publisher = self.create_publisher(Path, '/arm/end_effector_path', 10)
         if self.cameras_enabled:
             self.camera_rig = CameraRig(self.world, width=camera_width, height=camera_height)
+            self.camera_worker = CameraWorker(xacro_path, camera_width, camera_height)
             self.camera_tf = TransformBroadcaster(self)
             self.camera_images = {}
             self.camera_infos = {}
@@ -155,6 +159,7 @@ class SimulationNode(Node):
     def _reset_callback(self, _request: Trigger.Request, response: Trigger.Response):
         try:
             self.world.reset_world()
+            self.camera_generation += 1
             self.path_history.clear()
             self._spawn_initial_objects()
             response.success = True
@@ -231,6 +236,12 @@ class SimulationNode(Node):
         return response
 
     def _step_callback(self) -> None:
+        if self.camera_worker is not None:
+            result = self.camera_worker.poll()
+            if result is not None:
+                stamp_ns, generation, frames = result
+                if generation == self.camera_generation and not self.paused:
+                    self._publish_cameras(self._stamp(stamp_ns), frames)
         if not self.paused:
             self.world.step()
             self.sim_time_nanoseconds += int(round(1_000_000_000 / self.physics_hz))
@@ -238,8 +249,9 @@ class SimulationNode(Node):
         if self.step_count % self.publish_every == 0:
             self._publish_state()
 
-    def _stamp(self):
-        seconds, nanoseconds = divmod(self.sim_time_nanoseconds, 1_000_000_000)
+    def _stamp(self, stamp_ns=None):
+        seconds, nanoseconds = divmod(
+            self.sim_time_nanoseconds if stamp_ns is None else stamp_ns, 1_000_000_000)
         stamp = Clock().clock
         stamp.sec = int(seconds)
         stamp.nanosec = int(nanoseconds)
@@ -280,15 +292,18 @@ class SimulationNode(Node):
 
         self._publish_markers()
         self._publish_contacts(stamp)
-        if self.cameras_enabled and self.sim_time_nanoseconds >= self.next_camera_ns:
-            self._publish_cameras(stamp)
-            self.next_camera_ns += self.camera_period_ns
+        if (self.cameras_enabled and not self.paused
+                and self.sim_time_nanoseconds >= self.next_camera_ns
+                and self.camera_worker.idle):
+            self.camera_worker.submit(snapshot(
+                self.world, self.sim_time_nanoseconds, self.camera_generation, self.sorting_zones))
+            self.next_camera_ns = self.sim_time_nanoseconds + self.camera_period_ns
 
-    def _publish_cameras(self, stamp) -> None:
-        # Both renders run between physics steps and share the joint-state timestamp.
+    def _publish_cameras(self, stamp, frames) -> None:
+        # Images and TF retain the capture timestamp, not the delivery timestamp.
         transforms = []
         for name in self.camera_rig.names:
-            frame = self.camera_rig.render(name)
+            frame = frames[name]
             frame_id = f'{name}_camera_optical_frame'
             message = Image()
             message.header.stamp = stamp
@@ -392,6 +407,8 @@ class SimulationNode(Node):
         self.contact_publisher.publish(message)
 
     def destroy_node(self):
+        if self.camera_worker is not None:
+            self.camera_worker.close()
         self.world.disconnect()
         return super().destroy_node()
 

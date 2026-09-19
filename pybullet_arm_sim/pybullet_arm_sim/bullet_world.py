@@ -60,6 +60,12 @@ class BulletWorld:
         self.client_id = bullet.connect(bullet.GUI if gui else bullet.DIRECT)
         if self.client_id < 0:
             raise RuntimeError('failed to connect to PyBullet')
+        if gui:
+            # ROS camera previews live in their own window, not GUI debug buffers.
+            for flag in (bullet.COV_ENABLE_GUI, bullet.COV_ENABLE_RGB_BUFFER_PREVIEW,
+                         bullet.COV_ENABLE_DEPTH_BUFFER_PREVIEW,
+                         bullet.COV_ENABLE_SEGMENTATION_MARK_PREVIEW):
+                bullet.configureDebugVisualizer(flag, 0, physicsClientId=self.client_id)
 
         self.robot_id = -1
         self.urdf_path = ''

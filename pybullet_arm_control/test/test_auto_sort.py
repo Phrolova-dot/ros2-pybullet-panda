@@ -1,6 +1,7 @@
 """Contact validation and failed-grasp classification."""
 
 from types import SimpleNamespace
+import time
 
 import pytest
 
@@ -29,3 +30,14 @@ def test_missing_contact_is_a_retryable_grasp_failure():
     target = SimpleNamespace(color='red', x=.4, y=0)
     with pytest.raises(GraspFailure, match='missing contact'):
         AutoSort.grasp(fake, target)
+
+
+def test_scan_rejects_late_frames_captured_before_parking():
+    fake = SimpleNamespace(joint_stamp=200, observation=(100, time.monotonic(), []))
+    def wait(predicate, *args):
+        fake.observation = (150, time.monotonic(), ['old'])
+        assert not predicate()
+        fake.observation = (201, time.monotonic(), ['fresh'])
+        assert predicate()
+    fake.wait = wait
+    assert AutoSort.scan(fake) == ['fresh']

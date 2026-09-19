@@ -84,6 +84,12 @@ python ~/ros2_ws/src/ros2_pybullet_arm/tools/sorting_smoke_test.py
 独立节点 `auto_sort` 提供 ROS 参数 `max_retries:=1`、`expected_parts:=4`、
 `keep_alive:=false`，须配合已经运行的分拣场景使用。
 
+相机由两个独立后台进程渲染，不占用物理循环；默认 320×320、目标采样率
+15 Hz，实际帧率取决于 CPU。PyBullet 内置图像预览已关闭。
+运动使用 120 Hz 指令与五次平滑曲线，抓取和视觉验收仍保留必要停顿。
+可通过 `camera_width`、`camera_height`、`camera_hz` 调整画质与帧率，
+实测数据见 [流畅度说明](docs/rendering.md)。
+
 ## 快速启动
 
 每个新终端先执行：
@@ -174,8 +180,8 @@ ros2 run pybullet_arm_sim camera_viewer
 | 腕部 | `/cameras/wrist/image_raw` | `/cameras/wrist/camera_info` | `wrist_camera_optical_frame` |
 
 光学坐标系采用 x 向右、y 向下、z 向前的约定。每次采样的图像、`CameraInfo`
-与同时发布的关节状态使用相同仿真时间戳。默认按仿真时间 10 Hz 采样，实际墙钟帧率
-取决于渲染速度；暂停仿真后不产生新相机帧。
+与采样时的关节状态使用相同仿真时间戳；图像异步渲染，会晚于关节状态到达。
+默认目标为仿真时间 10 Hz 采样，实际墙钟帧率取决于渲染速度；暂停后不发布新帧。
 
 图像与内参话题使用传感器 QoS（Best Effort）；在 RViz2 添加 Image 显示时，
 将可靠性设置为 **Best Effort**。
@@ -188,7 +194,7 @@ ros2 launch pybullet_arm_bringup simulation.launch.py \
 ```
 
 使用 `cameras:=false` 可关闭相机渲染、图像/内参话题与相机 TF。
-提高分辨率或帧率会增加 CPU 开销，可能降低仿真速度。这一步提供 RGB 观测，深度图、
+提高分辨率或目标帧率会增加 CPU 开销，可能降低相机实际帧率。当前提供 RGB 观测，尚无深度图。
 `auto_sort` 使用外部相机颜色识别；`pick_place` 仍然读取仿真物体位姿。
 
 ## 显示方式

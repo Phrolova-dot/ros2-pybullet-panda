@@ -27,8 +27,10 @@
 x 向右、y 向下、z 向前的光学坐标约定，并发布 TF。
 
 两路图像默认为 224×224、`rgb8`。`CameraInfo` 的尺寸与内参对应实际渲染投影。
-同次采样的图像、内参与关节状态使用相同仿真时间戳；默认每 0.1 秒仿真时间
-采样一次，暂停不产生新帧。实际墙钟帧率取决于 CPU 渲染速度。
+同次采样的图像、内参、相机 TF 与原始关节状态使用相同仿真时间戳。
+默认目标为每 0.1 秒仿真时间采样一次；相机由独立进程异步渲染，
+因此图像比同时间戳的关节状态晚到。最多一对帧在途，忙时跳过采样；
+暂停不发布新帧。实际墙钟帧率取决于 CPU 渲染速度。
 图像与内参采用传感器 QoS（Best Effort），订阅端应使用兼容设置。
 
 `ros2 run pybullet_arm_sim camera_viewer` 订阅两路图像并并排预览，按 Q 或 Esc
@@ -38,9 +40,10 @@ x 向右、y 向下、z 向前的光学坐标约定，并发布 TF。
 
 ## 自动分拣
 
-`sorting.launch.py` 启动四方块场景、448×448 / 5 Hz 双相机、
+`sorting.launch.py` 启动四方块场景、320×320 / 15 Hz 目标采样率双相机、
 `auto_sort` 和默认开启的 PyBullet / 相机窗口。支持 `seed`、`rviz`、
-`pybullet_gui`、`camera_viewer` 参数。默认 RViz 关闭。
+`pybullet_gui`、`camera_viewer`、`camera_width`、`camera_height`、
+`camera_hz` 参数。默认 RViz 关闭。
 
 | 话题 | 类型 | 含义 |
 | --- | --- | --- |
@@ -69,7 +72,7 @@ ERROR 时退出并返回非零码；查看终端日志，不应依赖退出后�
 - 类型：`control_msgs/action/FollowJointTrajectory`
 - 关节名必须与七个手臂关节的固定顺序完全一致；
 - 每个 `time_from_start` 必须严格递增；
-- 当前插值方式为分段线性插值；
+- 默认分段五次平滑时间插值，各段端点速度和加速度为零；可配置为线性；
 - 成功条件是最终最大关节误差不超过配置阈值。
 
 ## 服务
@@ -113,6 +116,7 @@ ERROR 时退出并返回非零码；查看终端日志，不应依赖退出后�
 
 | 参数 | 默认值 | 含义 |
 | --- | --- | --- |
-| `command_hz` | `50.0` | 插值命令频率 |
+| `command_hz` | `120.0` | 插值命令频率 |
+| `interpolation` | `quintic` | `quintic` 平滑起停或 `linear` 线性插值 |
 | `goal_tolerance` | `0.05` | 最终最大关节误差，单位弧度 |
 | `settle_timeout` | `2.0` | 到点后的最大等待时间，单位秒 |

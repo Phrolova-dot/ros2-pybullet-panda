@@ -44,3 +44,18 @@ def test_validation_rejects_invalid_trajectories():
     assert not validate_trajectory(
         ARM_JOINT_NAMES, [point((99.0, -0.4, 0.0, -2.2, 0.0, 1.8, 0.7854), 1)]
     )[0]
+
+
+def test_quintic_smooth_monotone_endpoints():
+    start = (0., -.4, 0., -2.2, 0., 1.8, .7854)
+    end = (.5, -.8, .2, -2., .1, 1.6, .7854)
+    trajectory = parse_trajectory(ARM_JOINT_NAMES, [point(end, 3)])
+    def sample(t):
+        return sample_trajectory(start, trajectory, t, 'quintic')
+    assert sample(0) == start
+    assert sample(3) == end
+    assert sample(1.5) == pytest.approx([(a + b) / 2 for a, b in zip(start, end)])
+    assert abs(sample(.001)[0] - start[0]) < 1e-8
+    assert abs(sample(2.999)[0] - end[0]) < 1e-8
+    positions = [sample(i * .03)[0] for i in range(101)]
+    assert positions == sorted(positions)

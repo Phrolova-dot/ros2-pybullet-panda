@@ -18,10 +18,14 @@ from .trajectory import ARM_JOINT_NAMES, parse_trajectory, sample_trajectory, va
 class TrajectoryController(Node):
     def __init__(self) -> None:
         super().__init__('trajectory_controller')
-        self.declare_parameter('command_hz', 50.0)
+        self.declare_parameter('command_hz', 120.0)
+        self.declare_parameter('interpolation', 'quintic')
         self.declare_parameter('goal_tolerance', 0.05)
         self.declare_parameter('settle_timeout', 2.0)
         self.command_hz = float(self.get_parameter('command_hz').value)
+        self.interpolation = str(self.get_parameter('interpolation').value)
+        if self.interpolation not in ('linear', 'quintic'):
+            raise RuntimeError('interpolation must be linear or quintic')
         self.goal_tolerance = float(self.get_parameter('goal_tolerance').value)
         self.settle_timeout = float(self.get_parameter('settle_timeout').value)
         if self.command_hz <= 0.0 or self.goal_tolerance <= 0.0:
@@ -137,7 +141,8 @@ class TrajectoryController(Node):
                     )
                 if elapsed >= trajectory.times[-1]:
                     break
-                desired = sample_trajectory(start_positions, trajectory, elapsed)
+                desired = sample_trajectory(
+                    start_positions, trajectory, elapsed, self.interpolation)
                 self._publish_command(desired)
                 self._publish_feedback(goal_handle, desired, elapsed)
                 time.sleep(period)

@@ -10,20 +10,21 @@ from pybullet_arm_sim.cameras import CameraRig
 from pybullet_arm_sim.sorting_scene import create_sorting_scene
 
 
-def observe(world):
-    rig = CameraRig(world, 448, 448)
+def observe(world, size=320):
+    rig = CameraRig(world, size, size)
     frame = rig.render('external')
     return detect_blocks(frame.rgb, rig.intrinsics('external'), frame.position, frame.orientation)
 
 
 @pytest.mark.parametrize('seed', [0, 7, 42])
-def test_color_localization_on_actual_render(seed):
+@pytest.mark.parametrize('size', [320, 448])
+def test_color_localization_on_actual_render(seed, size):
     world = BulletWorld(model_path())
     try:
         create_sorting_scene(world, seed)
         for _ in range(120):
             world.step()
-        detections = [d for d in observe(world) if infeed(d)]
+        detections = [d for d in observe(world, size) if infeed(d)]
         print('Detections:', detections)
         assert len(detections) == 4
         assert [d.color for d in detections].count('red') == 2
@@ -50,7 +51,9 @@ def test_visual_sorting_physically_moves_all_four_parts():
             start = world.joint_state()[1][:7]
             goal = world.solve_ik(position, (1, 0, 0, 0))
             for index in range(720):
-                targets = np.array(start) + (np.array(goal) - start) * ((index + 1) / 720)
+                ratio = (index + 1) / 720
+                blend = ratio ** 3 * (10 - 15 * ratio + 6 * ratio ** 2)
+                targets = np.array(start) + (np.array(goal) - start) * blend
                 world.set_joint_targets(dict(zip(ARM_JOINT_NAMES, targets)))
                 world.step()
             settle(100)
