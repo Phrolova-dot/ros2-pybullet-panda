@@ -10,7 +10,7 @@ LAUNCH_DIRECTORY = Path(__file__).parents[1] / 'launch'
 
 @pytest.mark.parametrize(
     'filename',
-    ('display.launch.py', 'simulation.launch.py', 'demo.launch.py'),
+    ('display.launch.py', 'simulation.launch.py', 'demo.launch.py', 'sorting.launch.py'),
 )
 def test_launch_file_generates_description(filename):
     path = LAUNCH_DIRECTORY / filename

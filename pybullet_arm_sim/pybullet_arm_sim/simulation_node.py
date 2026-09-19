@@ -20,6 +20,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 
 from .bullet_world import ARM_JOINT_NAMES, BulletWorld
 from .cameras import CameraRig
+from .sorting_scene import create_sorting_scene
 from .validation import validate_named_positions
 
 
@@ -32,6 +33,7 @@ class SimulationNode(Node):
         self.declare_parameter('publish_hz', 60.0)
         self.declare_parameter('seed', 42)
         self.declare_parameter('spawn_default_box', True)
+        self.declare_parameter('sorting_scene', False)
         self.declare_parameter('cameras', True)
         self.declare_parameter('camera_hz', 10.0)
         self.declare_parameter('camera_width', 224)
@@ -108,7 +110,20 @@ class SimulationNode(Node):
         self.create_service(SolveIK, '/arm/solve_ik', self._solve_ik_callback)
         self.create_service(SpawnBox, '/simulation/spawn_box', self._spawn_box_callback)
 
-        if bool(self.get_parameter('spawn_default_box').value):
+        self._spawn_initial_objects()
+
+        self.timer = self.create_timer(1.0 / physics_hz, self._step_callback)
+        self.get_logger().info(
+            f'PyBullet arm ready: physics={physics_hz:.0f} Hz, '
+            f'publish={physics_hz / self.publish_every:.0f} Hz'
+        )
+
+    def _spawn_initial_objects(self):
+        self.sorting_zones = []
+        if bool(self.get_parameter('sorting_scene').value):
+            self.sorting_zones = create_sorting_scene(
+                self.world, int(self.get_parameter('seed').value))
+        elif bool(self.get_parameter('spawn_default_box').value):
             self.world.spawn_box(
                 name='training_cube',
                 position=(0.43, 0.0, 0.035),
@@ -117,12 +132,6 @@ class SimulationNode(Node):
                 mass=0.10,
                 color=(0.95, 0.25, 0.08, 1.0),
             )
-
-        self.timer = self.create_timer(1.0 / physics_hz, self._step_callback)
-        self.get_logger().info(
-            f'PyBullet arm ready: physics={physics_hz:.0f} Hz, '
-            f'publish={physics_hz / self.publish_every:.0f} Hz'
-        )
 
     def _trajectory_callback(self, message: JointTrajectory) -> None:
         if not message.points:
@@ -147,15 +156,7 @@ class SimulationNode(Node):
         try:
             self.world.reset_world()
             self.path_history.clear()
-            if bool(self.get_parameter('spawn_default_box').value):
-                self.world.spawn_box(
-                    name='training_cube',
-                    position=(0.43, 0.0, 0.035),
-                    orientation=(0.0, 0.0, 0.0, 1.0),
-                    size=(0.06, 0.06, 0.07),
-                    mass=0.10,
-                    color=(0.95, 0.25, 0.08, 1.0),
-                )
+            self._spawn_initial_objects()
             response.success = True
             response.message = 'simulation reset to home state'
             self.next_camera_ns = self.sim_time_nanoseconds
@@ -337,6 +338,18 @@ class SimulationNode(Node):
         ground.scale.x, ground.scale.y, ground.scale.z = 2.0, 2.0, 0.01
         ground.color.r, ground.color.g, ground.color.b, ground.color.a = 0.35, 0.38, 0.42, 1.0
         markers.markers.append(ground)
+        for index, (label, position, size, color) in enumerate(self.sorting_zones):
+            pad = Marker()
+            pad.header = ground.header
+            pad.ns = 'sorting_zones'
+            pad.id = index
+            pad.type = Marker.CUBE
+            pad.action = Marker.ADD
+            pad.pose.position.x, pad.pose.position.y, pad.pose.position.z = position
+            pad.pose.orientation.w = 1.0
+            pad.scale.x, pad.scale.y, pad.scale.z = size
+            pad.color.r, pad.color.g, pad.color.b, pad.color.a = color
+            markers.markers.append(pad)
         for body_id, box in self.world.objects.items():
             position, orientation = self.world.box_pose(body_id)
             marker = Marker()

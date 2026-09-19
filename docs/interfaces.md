@@ -33,7 +33,27 @@ x 向右、y 向下、z 向前的光学坐标约定，并发布 TF。
 
 `ros2 run pybullet_arm_sim camera_viewer` 订阅两路图像并并排预览，按 Q 或 Esc
 退出。图像发布不依赖此窗口，也不依赖 PyBullet 或 RViz2 图形界面。
-当前仅提供 RGB；深度图、视觉检测和模型推理接口尚未实现。
+当前相机仅提供 RGB；`auto_sort` 对外部图像进行颜色检测。
+深度图和模型推理接口尚未实现。
+
+## 自动分拣
+
+`sorting.launch.py` 启动四方块场景、448×448 / 5 Hz 双相机、
+`auto_sort` 和默认开启的 PyBullet / 相机窗口。支持 `seed`、`rviz`、
+`pybullet_gui`、`camera_viewer` 参数。默认 RViz 关闭。
+
+| 话题 | 类型 | 含义 |
+| --- | --- | --- |
+| `/sorting/status` | `std_msgs/msg/String` | JSON 状态、红蓝计数、总数、目标数与详情；可靠、Transient Local |
+| `/sorting/annotated_image` | `sensor_msgs/msg/Image` | 外部 RGB 识别叠加画面；传感器 QoS |
+
+`auto_sort` 参数：`expected_parts=4`（1..4）、`max_retries=1`（0..2）、
+`keep_alive=true`（完成后继续发布状态/图像）。红蓝各有两个固定放置槽。
+启动时识别已占用槽位，可接续完整可见的同批物料；不适用于残留在夹爪中的物料。
+状态包括 WAITING、DETECT、APPROACH、DESCEND、GRASP、LIFT、TRANSFER、
+LOWER、RELEASE、VERIFY、SORTED、RETRY、COMPLETE 和 ERROR。
+程序使用同时间戳 RGB/CameraInfo/TF 定位，接触反馈仅用于检查夹持。
+ERROR 时退出并返回非零码；查看终端日志，不应依赖退出后的历史状态话题。
 
 ## 搬运程序
 
@@ -85,7 +105,8 @@ x 向右、y 向下、z 向前的光学坐标约定，并发布 TF。
 | `pybullet_gui` | `false` | 是否打开 PyBullet 原生窗口 |
 | `physics_hz` | `240.0` | 物理步进频率 |
 | `publish_hz` | `60.0` | ROS 状态发布频率 |
-| `seed` | `42` | 预留的确定性随机种子 |
+| `seed` | `42` | 分拣场景颜色排列与位置扰动的随机种子 |
+| `sorting_scene` | `false` | 创建四件分拣场景，优先于训练方块 |
 | `spawn_default_box` | `true` | 是否创建训练方块 |
 
 ### `trajectory_controller`

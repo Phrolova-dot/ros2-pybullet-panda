@@ -21,8 +21,8 @@ from .trajectory import ARM_JOINT_NAMES
 
 
 class PickPlace(Node):
-    def __init__(self):
-        super().__init__('pick_place')
+    def __init__(self, node_name='pick_place', use_object_feedback=True):
+        super().__init__(node_name)
         self.declare_parameter('place_x', 0.43)
         self.declare_parameter('place_y', 0.25)
         self.box = None
@@ -35,7 +35,8 @@ class PickPlace(Node):
         self.joint_time = 0.0
         self.active_goal = None
         qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
-        self.create_subscription(MarkerArray, '/simulation/objects', self.objects, qos)
+        if use_object_feedback:
+            self.create_subscription(MarkerArray, '/simulation/objects', self.objects, qos)
         self.create_subscription(ContactStateArray, '/simulation/contacts', self.contacts, 10)
         self.create_subscription(PoseStamped, '/arm/end_effector_pose', self.pose, 10)
         self.create_subscription(JointState, '/joint_states', self.joints, 10)

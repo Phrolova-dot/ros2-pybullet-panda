@@ -13,6 +13,7 @@ The current version includes:
 - Joint states, simulation clock, end-effector pose and path, contacts, and
   object markers
 - External and wrist RGB cameras with matching camera intrinsics and TF
+- Camera-guided red/blue sorting with physical grasp checks and annotated images
 - A standard `FollowJointTrajectory` action
 - Services for world reset, pause, inverse kinematics, and box spawning
 - RViz2 integration, predefined trajectories, an IK demo, and automated tests
@@ -82,6 +83,44 @@ Run the IK target demo:
 ros2 run pybullet_arm_control ik_demo --ros-args \
   -p target_x:=0.42 -p target_y:=0.12 -p target_z:=0.24
 ```
+
+## Automatic Color Sorting
+
+After initializing the terminal as above, stop old simulations and run:
+
+```bash
+ros2 launch pybullet_arm_bringup sorting.launch.py
+```
+
+Panda sorts a batch of four blocks (two red, two blue) into matching colored
+zones. The launch opens PyBullet and a camera preview showing detections,
+task state and counts. A batch takes roughly two minutes on the tested host.
+The arm parks after completion; Ctrl+C stops the launch. Relaunch for a new batch,
+optionally adding `seed:=7` to change the initial layout.
+
+The controller uses synchronized external RGB, camera calibration and TF:
+HSV segmentation → planar localization → grasp → transfer → visual verification.
+Both fingers must contact the same physical part. Failed grasps are retried once;
+lost contact during transport, missing images or unverified placement stop the task.
+No object poses from simulator markers are used by this controller.
+
+This version assumes separated, upright 6×6×7 cm blocks on a flat surface,
+known block height and an unobstructed workspace. Destination pads are visual
+zones, not walled bins. It is a four-part batch demo, not a conveyor controller.
+Do not run another motion client or reset/pause the simulation during sorting.
+
+```bash
+# Headless batch; the status node stays alive after completion.
+ros2 launch pybullet_arm_bringup sorting.launch.py pybullet_gui:=false camera_viewer:=false
+# In another initialized terminal:
+ros2 topic echo /sorting/status
+python ~/ros2_ws/src/ros2_pybullet_arm/tools/sorting_smoke_test.py
+```
+
+The smoke test independently checks the final physical object positions.
+`/sorting/annotated_image` carries the detection overlay. The standalone
+`auto_sort` node supports `max_retries:=1`, `expected_parts:=4` and
+`keep_alive:=false` via ROS parameters; use it only with an existing sorting scene.
 
 ## Pick and Place
 
@@ -173,9 +212,9 @@ ros2 launch pybullet_arm_bringup simulation.launch.py \
 
 Use `cameras:=false` to disable camera rendering, image/calibration topics,
 and camera TF. Increasing image size or frame rate adds CPU work and can
-slow the simulation. This stage provides RGB observations; depth, visual
-object detection, and VLA model integration are future work. `pick_place`
-continues to use simulated object poses.
+slow the simulation. Cameras provide RGB observations; `auto_sort` performs
+color-based detection, while `pick_place` continues to use simulated object
+poses. Depth and model inference are not implemented.
 
 ## Display Modes
 
@@ -285,8 +324,8 @@ topics and launch files, trajectory control, then the PyBullet world and IK.
   constraints or reachability residual check.
 - Feedback-checked pick-and-place is implemented for the standard training
   cube; arbitrary-object grasping and obstacle-aware planning are not.
-- The two RGB cameras provide observations and calibration; the current
-  controller does not yet use images to choose actions.
+- Color sorting uses external RGB with a known-height planar approximation;
+  it does not estimate arbitrary 3D object poses.
 - The PyBullet node publishes simulation time, while the controller
   intentionally uses monotonic wall time so pausing the simulation does not
   deadlock an action.

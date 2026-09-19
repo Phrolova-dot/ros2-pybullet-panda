@@ -44,12 +44,15 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument('cameras', default_value='true',
                                   description='Publish external and wrist RGB cameras'),
+            DeclareLaunchArgument('sorting_scene', default_value='false'),
+            DeclareLaunchArgument('seed', default_value='42'),
             DeclareLaunchArgument('camera_hz', default_value='10.0',
                                   description='Camera rate in simulation time'),
             DeclareLaunchArgument('camera_width', default_value='224'),
             DeclareLaunchArgument('camera_height', default_value='224'),
             DeclareLaunchArgument('camera_viewer', default_value='false',
                                   description='Open the two-camera preview window'),
+            DeclareLaunchArgument('external_topic', default_value='/cameras/external/image_raw'),
             Node(
                 package='robot_state_publisher',
                 executable='robot_state_publisher',
@@ -78,6 +81,8 @@ def generate_launch_description() -> LaunchDescription:
                             spawn_default_box, value_type=bool
                         ),
                         'cameras': ParameterValue(LaunchConfiguration('cameras'), value_type=bool),
+                        'sorting_scene': ParameterValue(LaunchConfiguration('sorting_scene'), value_type=bool),
+                        'seed': ParameterValue(LaunchConfiguration('seed'), value_type=int),
                         'camera_hz': ParameterValue(LaunchConfiguration('camera_hz'), value_type=float),
                         'camera_width': ParameterValue(LaunchConfiguration('camera_width'), value_type=int),
                         'camera_height': ParameterValue(LaunchConfiguration('camera_height'), value_type=int),
@@ -105,6 +110,7 @@ def generate_launch_description() -> LaunchDescription:
                 executable='camera_viewer',
                 name='camera_viewer',
                 output='screen',
+                parameters=[{'external_topic': LaunchConfiguration('external_topic')}],
                 condition=IfCondition(LaunchConfiguration('camera_viewer')),
             ),
         ]

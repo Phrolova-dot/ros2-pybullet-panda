@@ -25,6 +25,7 @@
   <depend>xacro</depend>
 
   <test_depend>pybullet_arm_description</test_depend>
+  <test_depend>pybullet_arm_control</test_depend>
   <test_depend>python3-pytest</test_depend>
 
   <export>

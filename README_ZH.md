@@ -10,6 +10,7 @@
 - PyBullet 240 Hz 确定步长仿真；
 - 关节状态、仿真时钟、末端位姿、轨迹、接触与物体 Marker；
 - 外部与腕部 RGB 双相机，配套相机内参与 TF；
+- 相机引导的红蓝自动分拣、物理夹持检查及识别画面；
 - 标准 `FollowJointTrajectory` Action；
 - 世界重置、暂停、逆运动学和生成方块服务；
 - RViz2、预设轨迹、IK 演示及自动化测试；
@@ -49,6 +50,39 @@ trajectory_controller ----> /arm_controller/joint_trajectory
 | `pybullet_arm_bringup` | 参数和 Launch 编排 |
 
 详细说明见 [架构文档](docs/architecture.md) 和 [接口清单](docs/interfaces.md)。
+
+## 自动颜色分拣
+
+初始化终端环境（命令见下方）并停止旧仿真后，一条命令启动：
+
+```bash
+ros2 launch pybullet_arm_bringup sorting.launch.py
+```
+
+Panda 将四个方块（红、蓝各两个）逐个放进对应颜色区域。默认打开 PyBullet
+窗口和相机预览，显示识别结果、任务状态与计数。本机测试一批约两分钟。
+完成后机械臂停靠，Ctrl+C 结束；重新启动生成新一批，添加 `seed:=7` 可改变初始布局。
+
+流程：同步外部 RGB、内参与 TF → HSV 颜色分割 → 平面定位 → 夹取 →
+搬运 → 相机验收。控制程序不读取仿真 Marker 的物体位姿。
+双指必须接触同一个物体；夹取失败默认重试一次，搬运中失去接触、图像缺失
+或放置验收失败则停止并报告错误。
+
+当前适用范围：平面上分开放置、直立的 6×6×7 cm 方块，已知高度、无障碍工作区。
+目标区域是可视化垫板，不是带围墙的料箱；每批四件，暂不涉及传送带。
+分拣期间不要运行其他运动客户端，也不要重置或暂停仿真。
+
+```bash
+# 无窗口运行；完成后状态节点仍保持运行。
+ros2 launch pybullet_arm_bringup sorting.launch.py pybullet_gui:=false camera_viewer:=false
+# 在另一个完成环境初始化的终端查看状态、验收：
+ros2 topic echo /sorting/status
+python ~/ros2_ws/src/ros2_pybullet_arm/tools/sorting_smoke_test.py
+```
+
+验收脚本独立核对四个物体的实际落点。`/sorting/annotated_image` 发布识别叠加画面。
+独立节点 `auto_sort` 提供 ROS 参数 `max_retries:=1`、`expected_parts:=4`、
+`keep_alive:=false`，须配合已经运行的分拣场景使用。
 
 ## 快速启动
 
@@ -155,7 +189,7 @@ ros2 launch pybullet_arm_bringup simulation.launch.py \
 
 使用 `cameras:=false` 可关闭相机渲染、图像/内参话题与相机 TF。
 提高分辨率或帧率会增加 CPU 开销，可能降低仿真速度。这一步提供 RGB 观测，深度图、
-视觉识别和 VLA 模型接入留待后续；`pick_place` 仍然读取仿真物体位姿。
+`auto_sort` 使用外部相机颜色识别；`pick_place` 仍然读取仿真物体位姿。
 
 ## 显示方式
 
@@ -252,7 +286,7 @@ ros2 topic pub --once /gripper/command std_msgs/msg/Float64 "{data: 0.04}"
 - 控制器是教学用 ROS 2 Action 服务器，不是 `ros2_control` 硬件接口；
 - IK 使用 PyBullet 数值解，目前不做碰撞约束和可达性残差判定；
 - 已实现标准训练方块的反馈检查搬运流程，尚未实现任意物体抓取和避障规划；
-- 双 RGB 相机已提供图像与内参，当前控制程序尚未根据图像决策动作；
+- 颜色分拣使用外部 RGB 与已知高度平面近似，不估计任意物体的三维姿态；
 - 仿真时钟由 PyBullet 节点发布，控制器故意使用墙上时间，避免暂停仿真时 Action 自锁。
 
 这些边界正好对应后续可独立实现的升级任务。

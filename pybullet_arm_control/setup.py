@@ -24,6 +24,7 @@ setup(
             'demo_sequence = pybullet_arm_control.demo_sequence:main',
             'ik_demo = pybullet_arm_control.ik_demo:main',
             'pick_place = pybullet_arm_control.pick_place:main',
+            'auto_sort = pybullet_arm_control.auto_sort:main',
         ],
     },
 )

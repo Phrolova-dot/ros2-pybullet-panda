@@ -15,9 +15,12 @@ class CameraViewer(Node):
         super().__init__('camera_viewer')
         self.frames = {}
         self.received = {}
+        self.declare_parameter('external_topic', '/cameras/external/image_raw')
         for name in ('external', 'wrist'):
+            topic = (str(self.get_parameter('external_topic').value)
+                     if name == 'external' else '/cameras/wrist/image_raw')
             self.create_subscription(
-                Image, f'/cameras/{name}/image_raw',
+                Image, topic,
                 lambda message, name=name: self.receive(name, message),
                 qos_profile_sensor_data)
 
