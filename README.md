@@ -12,6 +12,7 @@ The current version includes:
 - Deterministic PyBullet simulation at 240 Hz
 - Joint states, simulation clock, end-effector pose and path, contacts, and
   object markers
+- External and wrist RGB cameras with matching camera intrinsics and TF
 - A standard `FollowJointTrajectory` action
 - Services for world reset, pause, inverse kinematics, and box spawning
 - RViz2 integration, predefined trajectories, an IK demo, and automated tests
@@ -124,6 +125,60 @@ objects.
 ros2 service call /simulation/reset std_srvs/srv/Trigger '{}'
 ```
 
+## Cameras
+
+Two cameras are enabled by default: an external camera fixed in the world
+and a wrist camera attached to `panda_hand`. Both publish 224 × 224 `rgb8`
+images, matching `CameraInfo`, and optical-frame TF. Rendering uses PyBullet's
+CPU TinyRenderer and also works without a PyBullet window.
+
+Start the PyBullet window and a separate side-by-side camera preview:
+
+```bash
+ros2 launch pybullet_arm_bringup simulation.launch.py \
+  rviz:=false pybullet_gui:=true camera_viewer:=true
+```
+
+If the simulation is already running, open only the preview in another
+initialized terminal:
+
+```bash
+ros2 run pybullet_arm_sim camera_viewer
+```
+
+Press **Q** or **Esc** in the preview to close it. The preview is optional;
+launching the simulation alone does not open this window. It uses the system
+OpenCV package inherited by the virtual environment.
+
+| Camera | Image topic | Calibration topic | Optical frame |
+| --- | --- | --- | --- |
+| External | `/cameras/external/image_raw` | `/cameras/external/camera_info` | `external_camera_optical_frame` |
+| Wrist | `/cameras/wrist/image_raw` | `/cameras/wrist/camera_info` | `wrist_camera_optical_frame` |
+
+Optical frames use x-right, y-down, z-forward axes. Each image and its
+`CameraInfo` share the simulation timestamp of the joint states published
+with that camera sample. The default rate is 10 Hz in simulation time;
+actual wall-clock frame rate depends on rendering speed. Pausing the
+simulation stops new camera frames.
+
+The image and calibration topics use sensor-data QoS (best effort).
+Select **Best Effort** when adding an Image display in RViz2.
+
+Configure resolution and sampling frequency at launch:
+
+```bash
+ros2 launch pybullet_arm_bringup simulation.launch.py \
+  camera_width:=224 camera_height:=224 camera_hz:=10.0
+```
+
+Use `cameras:=false` to disable camera rendering, image/calibration topics,
+and camera TF. Increasing image size or frame rate adds CPU work and can
+slow the simulation. This stage provides RGB observations; depth, visual
+object detection, and VLA model integration are future work. `pick_place`
+continues to use simulated object poses.
+
+## Display Modes
+
 Display only the robot model with interactive joint sliders:
 
 ```bash
@@ -134,8 +189,11 @@ Run without graphical windows:
 
 ```bash
 ros2 launch pybullet_arm_bringup simulation.launch.py \
-  rviz:=false pybullet_gui:=false
+  rviz:=false pybullet_gui:=false camera_viewer:=false
 ```
+
+Camera topics remain available in headless mode unless `cameras:=false` is
+also set.
 
 ## Build
 
@@ -179,6 +237,14 @@ python ~/ros2_ws/src/ros2_pybullet_arm/tools/smoke_test.py
 The script verifies `/clock`, `/joint_states`, world reset, object spawning,
 IK, and the trajectory action.
 
+With cameras enabled, check synchronized images, calibration, TF, and joint
+states (optionally saving actual frames):
+
+```bash
+python ~/ros2_ws/src/ros2_pybullet_arm/tools/camera_smoke_test.py \
+  --output-dir /tmp/panda_camera_frames
+```
+
 ## Useful Inspection Commands
 
 ```bash
@@ -219,6 +285,8 @@ topics and launch files, trajectory control, then the PyBullet world and IK.
   constraints or reachability residual check.
 - Feedback-checked pick-and-place is implemented for the standard training
   cube; arbitrary-object grasping and obstacle-aware planning are not.
+- The two RGB cameras provide observations and calibration; the current
+  controller does not yet use images to choose actions.
 - The PyBullet node publishes simulation time, while the controller
   intentionally uses monotonic wall time so pausing the simulation does not
   deadlock an action.

@@ -3,6 +3,10 @@ pybullet_sim:
     physics_hz: 240.0
     publish_hz: 60.0
     seed: 42
+    cameras: true
+    camera_hz: 10.0
+    camera_width: 224
+    camera_height: 224
 
 trajectory_controller:
   ros__parameters:

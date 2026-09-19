@@ -9,6 +9,7 @@
 - Franka Panda 七轴机械臂与双指夹爪模型；
 - PyBullet 240 Hz 确定步长仿真；
 - 关节状态、仿真时钟、末端位姿、轨迹、接触与物体 Marker；
+- 外部与腕部 RGB 双相机，配套相机内参与 TF；
 - 标准 `FollowJointTrajectory` Action；
 - 世界重置、暂停、逆运动学和生成方块服务；
 - RViz2、预设轨迹、IK 演示及自动化测试；
@@ -111,6 +112,53 @@ ros2 run pybullet_arm_control pick_place --ros-args -p place_y:=0.0
 ros2 service call /simulation/reset std_srvs/srv/Trigger '{}'
 ```
 
+## 双相机
+
+默认启用两台相机：固定在世界中的外部相机，以及随 `panda_hand` 运动的腕部相机。
+两路均发布 224×224 的 `rgb8` 图像、匹配的 `CameraInfo` 和光学坐标系 TF。
+图像由 PyBullet 的 CPU TinyRenderer 渲染，不依赖 PyBullet 图形窗口。
+
+同时启动 PyBullet 窗口与独立的双画面相机预览：
+
+```bash
+ros2 launch pybullet_arm_bringup simulation.launch.py \
+  rviz:=false pybullet_gui:=true camera_viewer:=true
+```
+
+如果仿真已经运行，在另一个已初始化环境的终端单独打开预览：
+
+```bash
+ros2 run pybullet_arm_sim camera_viewer
+```
+
+在预览窗口按 **Q** 或 **Esc** 关闭。预览是可选窗口，单独启动仿真不会自动打开它；
+使用虚拟环境继承的系统 OpenCV。
+
+| 相机 | 图像话题 | 内参话题 | 光学坐标系 |
+| --- | --- | --- | --- |
+| 外部 | `/cameras/external/image_raw` | `/cameras/external/camera_info` | `external_camera_optical_frame` |
+| 腕部 | `/cameras/wrist/image_raw` | `/cameras/wrist/camera_info` | `wrist_camera_optical_frame` |
+
+光学坐标系采用 x 向右、y 向下、z 向前的约定。每次采样的图像、`CameraInfo`
+与同时发布的关节状态使用相同仿真时间戳。默认按仿真时间 10 Hz 采样，实际墙钟帧率
+取决于渲染速度；暂停仿真后不产生新相机帧。
+
+图像与内参话题使用传感器 QoS（Best Effort）；在 RViz2 添加 Image 显示时，
+将可靠性设置为 **Best Effort**。
+
+启动时可调整分辨率和采样频率：
+
+```bash
+ros2 launch pybullet_arm_bringup simulation.launch.py \
+  camera_width:=224 camera_height:=224 camera_hz:=10.0
+```
+
+使用 `cameras:=false` 可关闭相机渲染、图像/内参话题与相机 TF。
+提高分辨率或帧率会增加 CPU 开销，可能降低仿真速度。这一步提供 RGB 观测，深度图、
+视觉识别和 VLA 模型接入留待后续；`pick_place` 仍然读取仿真物体位姿。
+
+## 显示方式
+
 只看模型并手动拖动关节滑块：
 
 ```bash
@@ -121,8 +169,10 @@ ros2 launch pybullet_arm_bringup display.launch.py
 
 ```bash
 ros2 launch pybullet_arm_bringup simulation.launch.py \
-  rviz:=false pybullet_gui:=false
+  rviz:=false pybullet_gui:=false camera_viewer:=false
 ```
+
+无界面模式仍然发布相机话题；如需一并关闭，添加 `cameras:=false`。
 
 ## 构建
 
@@ -162,6 +212,13 @@ python ~/ros2_ws/src/ros2_pybullet_arm/tools/smoke_test.py
 
 脚本会验证 `/clock`、`/joint_states`、世界重置、生成物体、IK 和轨迹 Action。
 
+启用相机后，可检查图像、内参、TF 与关节状态的同步，并保存实际帧：
+
+```bash
+python ~/ros2_ws/src/ros2_pybullet_arm/tools/camera_smoke_test.py \
+  --output-dir /tmp/panda_camera_frames
+```
+
 ## 常用观察命令
 
 ```bash
@@ -195,6 +252,7 @@ ros2 topic pub --once /gripper/command std_msgs/msg/Float64 "{data: 0.04}"
 - 控制器是教学用 ROS 2 Action 服务器，不是 `ros2_control` 硬件接口；
 - IK 使用 PyBullet 数值解，目前不做碰撞约束和可达性残差判定；
 - 已实现标准训练方块的反馈检查搬运流程，尚未实现任意物体抓取和避障规划；
+- 双 RGB 相机已提供图像与内参，当前控制程序尚未根据图像决策动作；
 - 仿真时钟由 PyBullet 节点发布，控制器故意使用墙上时间，避免暂停仿真时 Action 自锁。
 
 这些边界正好对应后续可独立实现的升级任务。

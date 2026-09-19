@@ -12,9 +12,28 @@
 | `/arm/end_effector_path` | `nav_msgs/msg/Path` | 仿真发布 | 最近 500 个末端位姿 |
 | `/simulation/contacts` | `pybullet_arm_interfaces/msg/ContactStateArray` | 仿真发布 | 机械臂与已登记物体的接触 |
 | `/simulation/objects` | `visualization_msgs/msg/MarkerArray` | 仿真发布 | RViz2 中的仿真物体 |
+| `/cameras/external/image_raw` | `sensor_msgs/msg/Image` | 仿真发布 | 固定外部相机的 `rgb8` 图像 |
+| `/cameras/external/camera_info` | `sensor_msgs/msg/CameraInfo` | 仿真发布 | 与外部相机图像匹配的内参 |
+| `/cameras/wrist/image_raw` | `sensor_msgs/msg/Image` | 仿真发布 | 随机械臂腕部运动的 `rgb8` 图像 |
+| `/cameras/wrist/camera_info` | `sensor_msgs/msg/CameraInfo` | 仿真发布 | 与腕部相机图像匹配的内参 |
 
 物体 Marker 的 `text` 字段携带物体名称，`pick_place` 据此识别
 `training_cube`；地面 Marker 使用独立命名空间。
+
+## 相机与时间戳
+
+外部相机固定在世界中，腕部相机随 `panda_hand` 运动。对应的光学坐标系为
+`external_camera_optical_frame` 和 `wrist_camera_optical_frame`，均采用
+x 向右、y 向下、z 向前的光学坐标约定，并发布 TF。
+
+两路图像默认为 224×224、`rgb8`。`CameraInfo` 的尺寸与内参对应实际渲染投影。
+同次采样的图像、内参与关节状态使用相同仿真时间戳；默认每 0.1 秒仿真时间
+采样一次，暂停不产生新帧。实际墙钟帧率取决于 CPU 渲染速度。
+图像与内参采用传感器 QoS（Best Effort），订阅端应使用兼容设置。
+
+`ros2 run pybullet_arm_sim camera_viewer` 订阅两路图像并并排预览，按 Q 或 Esc
+退出。图像发布不依赖此窗口，也不依赖 PyBullet 或 RViz2 图形界面。
+当前仅提供 RGB；深度图、视觉检测和模型推理接口尚未实现。
 
 ## 搬运程序
 
@@ -43,6 +62,20 @@
 | `/simulation/spawn_box` | `pybullet_arm_interfaces/srv/SpawnBox` | 创建带质量、尺寸和颜色的方块 |
 
 ## 参数
+
+### `simulation.launch.py` 相机参数
+
+| 参数 | 默认值 | 含义 |
+| --- | --- | --- |
+| `cameras` | `true` | 启用双相机渲染、图像、内参与相机 TF 发布 |
+| `camera_width` | `224` | 两路图像宽度，单位像素 |
+| `camera_height` | `224` | 两路图像高度，单位像素 |
+| `camera_hz` | `10.0` | 按仿真时间计的相机采样频率 |
+| `camera_viewer` | `false` | 启动独立 OpenCV 双画面预览窗口 |
+
+默认开启相机数据，预览需主动启用。完全无图形窗口时使用
+`rviz:=false pybullet_gui:=false camera_viewer:=false`；需要同时关闭相机数据时
+再添加 `cameras:=false`。高分辨率或高采样频率会增加 CPU 渲染开销。
 
 ### `pybullet_sim`
 

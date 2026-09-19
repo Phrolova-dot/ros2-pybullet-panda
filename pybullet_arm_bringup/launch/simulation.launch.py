@@ -42,6 +42,14 @@ def generate_launch_description() -> LaunchDescription:
                 default_value='true',
                 description='Spawn the training cube',
             ),
+            DeclareLaunchArgument('cameras', default_value='true',
+                                  description='Publish external and wrist RGB cameras'),
+            DeclareLaunchArgument('camera_hz', default_value='10.0',
+                                  description='Camera rate in simulation time'),
+            DeclareLaunchArgument('camera_width', default_value='224'),
+            DeclareLaunchArgument('camera_height', default_value='224'),
+            DeclareLaunchArgument('camera_viewer', default_value='false',
+                                  description='Open the two-camera preview window'),
             Node(
                 package='robot_state_publisher',
                 executable='robot_state_publisher',
@@ -69,6 +77,10 @@ def generate_launch_description() -> LaunchDescription:
                         'spawn_default_box': ParameterValue(
                             spawn_default_box, value_type=bool
                         ),
+                        'cameras': ParameterValue(LaunchConfiguration('cameras'), value_type=bool),
+                        'camera_hz': ParameterValue(LaunchConfiguration('camera_hz'), value_type=float),
+                        'camera_width': ParameterValue(LaunchConfiguration('camera_width'), value_type=int),
+                        'camera_height': ParameterValue(LaunchConfiguration('camera_height'), value_type=int),
                     },
                 ],
             ),
@@ -87,6 +99,13 @@ def generate_launch_description() -> LaunchDescription:
                 arguments=['-d', rviz_config],
                 parameters=[{'use_sim_time': True}],
                 condition=IfCondition(rviz_enabled),
+            ),
+            Node(
+                package='pybullet_arm_sim',
+                executable='camera_viewer',
+                name='camera_viewer',
+                output='screen',
+                condition=IfCondition(LaunchConfiguration('camera_viewer')),
             ),
         ]
     )

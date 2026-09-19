@@ -1,22 +1,25 @@
 from __future__ import annotations
 
 from collections import deque
+import math
 
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, TransformStamped
 from nav_msgs.msg import Path
 from pybullet_arm_interfaces.msg import ContactState, ContactStateArray
 from pybullet_arm_interfaces.srv import SolveIK, SpawnBox
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from rosgraph_msgs.msg import Clock
-from sensor_msgs.msg import JointState
+from sensor_msgs.msg import CameraInfo, Image, JointState
 from std_msgs.msg import Float64
 from std_srvs.srv import SetBool, Trigger
 from trajectory_msgs.msg import JointTrajectory
+from tf2_ros import TransformBroadcaster
 from visualization_msgs.msg import Marker, MarkerArray
 
 from .bullet_world import ARM_JOINT_NAMES, BulletWorld
+from .cameras import CameraRig
 from .validation import validate_named_positions
 
 
@@ -29,14 +32,28 @@ class SimulationNode(Node):
         self.declare_parameter('publish_hz', 60.0)
         self.declare_parameter('seed', 42)
         self.declare_parameter('spawn_default_box', True)
+        self.declare_parameter('cameras', True)
+        self.declare_parameter('camera_hz', 10.0)
+        self.declare_parameter('camera_width', 224)
+        self.declare_parameter('camera_height', 224)
 
         xacro_path = str(self.get_parameter('robot_description_path').value)
         physics_hz = float(self.get_parameter('physics_hz').value)
         publish_hz = float(self.get_parameter('publish_hz').value)
+        self.cameras_enabled = bool(self.get_parameter('cameras').value)
+        camera_hz = float(self.get_parameter('camera_hz').value)
+        camera_width = int(self.get_parameter('camera_width').value)
+        camera_height = int(self.get_parameter('camera_height').value)
         if not xacro_path:
             raise RuntimeError('robot_description_path parameter is required')
         if physics_hz <= 0.0 or publish_hz <= 0.0 or publish_hz > physics_hz:
             raise RuntimeError('require 0 < publish_hz <= physics_hz')
+        if not math.isfinite(camera_hz) or not 0 < camera_hz <= publish_hz:
+            raise RuntimeError('require 0 < camera_hz <= publish_hz')
+        if not (16 <= camera_width <= 1920 and 16 <= camera_height <= 1080):
+            raise RuntimeError('camera size must be within 16x16 and 1920x1080')
+        self.camera_period_ns = int(round(1_000_000_000 / camera_hz))
+        self.next_camera_ns = 0
 
         self.world = BulletWorld(
             xacro_path=xacro_path,
@@ -66,6 +83,16 @@ class SimulationNode(Node):
             PoseStamped, '/arm/end_effector_pose', 10
         )
         self.path_publisher = self.create_publisher(Path, '/arm/end_effector_path', 10)
+        if self.cameras_enabled:
+            self.camera_rig = CameraRig(self.world, width=camera_width, height=camera_height)
+            self.camera_tf = TransformBroadcaster(self)
+            self.camera_images = {}
+            self.camera_infos = {}
+            for name in self.camera_rig.names:
+                self.camera_images[name] = self.create_publisher(
+                    Image, f'/cameras/{name}/image_raw', qos_profile_sensor_data)
+                self.camera_infos[name] = self.create_publisher(
+                    CameraInfo, f'/cameras/{name}/camera_info', qos_profile_sensor_data)
 
         self.create_subscription(
             JointTrajectory,
@@ -131,6 +158,7 @@ class SimulationNode(Node):
                 )
             response.success = True
             response.message = 'simulation reset to home state'
+            self.next_camera_ns = self.sim_time_nanoseconds
             self._publish_state()
         except Exception as error:  # noqa: BLE001
             response.success = False
@@ -251,6 +279,46 @@ class SimulationNode(Node):
 
         self._publish_markers()
         self._publish_contacts(stamp)
+        if self.cameras_enabled and self.sim_time_nanoseconds >= self.next_camera_ns:
+            self._publish_cameras(stamp)
+            self.next_camera_ns += self.camera_period_ns
+
+    def _publish_cameras(self, stamp) -> None:
+        # Both renders run between physics steps and share the joint-state timestamp.
+        transforms = []
+        for name in self.camera_rig.names:
+            frame = self.camera_rig.render(name)
+            frame_id = f'{name}_camera_optical_frame'
+            message = Image()
+            message.header.stamp = stamp
+            message.header.frame_id = frame_id
+            message.height, message.width = frame.rgb.shape[:2]
+            message.encoding = 'rgb8'
+            message.is_bigendian = 0
+            message.step = message.width * 3
+            message.data = frame.rgb.tobytes()
+            info = CameraInfo()
+            info.header = message.header
+            info.width, info.height = message.width, message.height
+            info.distortion_model = 'plumb_bob'
+            info.d = [0.0] * 5
+            info.k = list(self.camera_rig.intrinsics(name))
+            info.r = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+            fx, fy, cx, cy = info.k[0], info.k[4], info.k[2], info.k[5]
+            info.p = [fx, 0.0, cx, 0.0, 0.0, fy, cy, 0.0, 0.0, 0.0, 1.0, 0.0]
+            transform = TransformStamped()
+            transform.header.stamp = stamp
+            transform.header.frame_id = 'base_link'
+            transform.child_frame_id = frame_id
+            (transform.transform.translation.x,
+             transform.transform.translation.y,
+             transform.transform.translation.z) = frame.position
+            (transform.transform.rotation.x, transform.transform.rotation.y,
+             transform.transform.rotation.z, transform.transform.rotation.w) = frame.orientation
+            transforms.append(transform)
+            self.camera_images[name].publish(message)
+            self.camera_infos[name].publish(info)
+        self.camera_tf.sendTransform(transforms)
 
     def _publish_markers(self) -> None:
         markers = MarkerArray()

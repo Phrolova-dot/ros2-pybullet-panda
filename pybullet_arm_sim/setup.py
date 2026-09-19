@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'simulation_node = pybullet_arm_sim.simulation_node:main',
+            'camera_viewer = pybullet_arm_sim.camera_viewer:main',
         ],
     },
 )
